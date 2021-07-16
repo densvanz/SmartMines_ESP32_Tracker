@@ -197,13 +197,14 @@ void Task2code( void * pvParameters ){
     
     String http_txt= filename+(String)lastsent+".txt";
     String http_data = readFile(SD, http_txt);
+  
     int lastsent_int = lastsent.toInt();
     int lastnum_int = lastnum.toInt();
     
     if(http_data!=""){
       digitalWrite(LEDPin, HIGH);
       String http_data = readFile(SD, http_txt);
-
+/*
       String DT_RFID      = getValue(http_data, '|', 0);  //0
       String OP_RFID      = getValue(http_data, '|', 1);  //1
       String StartTime    = getValue(http_data, '|', 2);  //2
@@ -225,7 +226,10 @@ void Task2code( void * pvParameters ){
                               "&elevation=" + String(Fuel_Level)+
                               "&speed=" + String(Speed)+ 
                               "&fuel=" + String(Fuel_Level) + "";
-
+                     */         
+      String httpRequestData = "api_key=" + apiKeyValue +"&"+ http_data + "&fuel=60" +"";
+      Serial.println(httpRequestData);
+      
       bool Send_success=SendtoServer(httpRequestData);
 
       String lastsent=readFile(SD, "/File_LastSent.txt");
@@ -234,17 +238,23 @@ void Task2code( void * pvParameters ){
       int lastnum_int = lastnum.toInt();
       
       if(Send_success){
-        deleteFile(SD, http_txt);
+        
         if((lastsent_int==--lastnum_int)||(lastsent_int>=lastnum_int)){
           lastnum="0";
           lastsent="0";          
-          writeFile(SD, "/File_LastSent.txt", lastsent);
-          writeFile(SD, "/File_LastNum.txt", lastnum);
+          bool written1 = writeFile(SD, "/File_LastSent.txt", lastsent);
+          bool written2 = writeFile(SD, "/File_LastNum.txt", lastnum);
+
+          if(written1&&written2)
+            deleteFile(SD, http_txt);
         }
         else {
           
           lastsent_int++;
-          writeFile(SD, "/File_LastSent.txt", (String)lastsent_int);
+          bool written1 = writeFile(SD, "/File_LastSent.txt", (String)lastsent_int);
+          
+          if(written1)
+            deleteFile(SD, http_txt);
         }
       }
        digitalWrite(LEDPin, LOW);
@@ -283,21 +293,29 @@ String readFile(fs::FS &fs, String path){
     return read_String;
 }
 
-void writeFile(fs::FS &fs, String path, String message){
+bool writeFile(fs::FS &fs, String path, String message){
+    
     Serial.println("Writing file: "+ path);
-
+    vTaskDelay(10/portTICK_PERIOD_MS);
+    
     File file = fs.open(path, FILE_WRITE);
-    //vTaskDelay(1000/portTICK_PERIOD_MS);
+    vTaskDelay(10/portTICK_PERIOD_MS);
+    
     if(!file){
         Serial.println("Failed to open file for writing");
-        return;
+        return false;
     }
     if(file.print(message)){
         Serial.println("File written");
+        file.close();
+        return true;
     } else {
         Serial.println("Write failed");
+        file.close();
+        return false;
     }
-    file.close();
+    
+    
 }
 
 bool SendtoServer(String httpRequestData_local){
