@@ -182,18 +182,18 @@ void loop() {
  
 }
 
-//Task1code: Waits for Arduino Data and Saves to SD
+//Task1code: Waits for App Data and Saves to SD
 void Task1code( void * pvParameters ){
   for(;;){
     while(SerialBT.available()>0) {
       character = (char)SerialBT.read();
-      //delay(1); //wait for the next byte, if after this nothing has arrived it means the text was not part of the same stream entered by the user
-      App_Data+=character;
+      //delay(1); //wait for the next byte, if after this nothing has arrived it means the text was not part of the stream
+      App_Data+=character; 
     }
 
     while(Serial2.available()>0){
       character = (char)Serial2.read();
-      delay(1); //wait for the next byte, if after this nothing has arrived it means the text was not part of the same stream entered by the user
+      delay(1); 
       App_Data+=character;
     }
     
@@ -212,9 +212,16 @@ void Task1code( void * pvParameters ){
       
       String http_txt= filename+(String)lastnum_int+".txt";
       Serial.println(http_txt);
-      writeFile(SD, http_txt, http_data);
+      bool written1=false;
+      bool written2=false;
+      while(!written1){ //retry if failed to write
+        written1=writeFile(SD, http_txt, http_data); 
+      }
       lastnum_int++;
-      writeFile(SD, "/File_LastNum.txt", (String)lastnum_int);
+
+      while(!written2){
+        written2=writeFile(SD, "/File_LastNum.txt", (String)lastnum_int);
+      }
     }
     App_Data="";
    
@@ -260,9 +267,16 @@ void Task2code( void * pvParameters ){
         
         if((lastsent_int==--lastnum_int)||(lastsent_int>=lastnum_int)){
           lastnum="0";
-          lastsent="0";          
-          bool written1 = writeFile(SD, "/File_LastSent.txt", lastsent);
-          bool written2 = writeFile(SD, "/File_LastNum.txt", lastnum);
+          lastsent="0";
+          bool written1=false;
+          bool written2=false;
+          while(!written1) {         
+            written1 = writeFile(SD, "/File_LastSent.txt", lastsent);
+          }
+
+          while(!written2) {
+            written2 = writeFile(SD, "/File_LastNum.txt", lastnum);
+          }
 
           if(written1&&written2)
             deleteFile(SD, http_txt);
@@ -270,7 +284,11 @@ void Task2code( void * pvParameters ){
         else {
           
           lastsent_int++;
-          bool written1 = writeFile(SD, "/File_LastSent.txt", (String)lastsent_int);
+          bool written1 = false;
+
+          while(!written1) {
+            written1=writeFile(SD, "/File_LastSent.txt", (String)lastsent_int);
+          }
           
           if(written1)
             deleteFile(SD, http_txt);
