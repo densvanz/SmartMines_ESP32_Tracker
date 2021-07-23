@@ -2,19 +2,43 @@
 //Open SPI.h file for ESP32, replace line on
 // default SPIClass - "void begin(int8_t sck=-1, int8_t miso=-1, int8_t mosi=-1, int8_t ss=-1);"
 //with - "void begin(int8_t sck=18, int8_t miso=19, int8_t mosi=15, int8_t ss=5);"
-    
 
+#include "BluetoothSerial.h"
 #include "FS.h"
 #include "SD.h"
 #include "SPI.h"
 #include "Arduino.h"
 
+#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
+#error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
+#endif
+
+#define LEDPin            13
+#define BT_LED            32
+
+BluetoothSerial SerialBT;
+// Bt_Status callback function
+void Bt_Status (esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
+
+  if (event == ESP_SPP_SRV_OPEN_EVT) {
+    Serial.println ("Client Connected");
+    digitalWrite (BT_LED, HIGH);
+    // Do stuff if connected
+  }
+
+  else if (event == ESP_SPP_CLOSE_EVT ) {
+    Serial.println ("Client Disconnected");
+    digitalWrite (BT_LED, LOW);
+    // Do stuff if not connected
+  }
+}
 
 //Text File names : File_LastSent, File_LastNum, File_httpDatax
 
 TaskHandle_t Task1;
 TaskHandle_t Task2;
 String filename = "/File_httpData";
+String App_Data, character;
 
 #define RXD2 14
 #define TXD2 12
@@ -42,7 +66,7 @@ String apiKeyValue = "SmartyMines1234";
 
 //#define I2C_SDA_2            18
 //#define I2C_SCL_2            19
-#define LEDPin            13
+
 
 #define uS_TO_S_FACTOR 1000000UL  
 #define TIME_TO_SLEEP  3600        
@@ -77,7 +101,12 @@ bool setPowerBoostKeepOn(int en){
 
 void setup() {
   pinMode(LEDPin, OUTPUT);
+  pinMode(BT_LED, OUTPUT);
+  digitalWrite (BT_LED, LOW);
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+  SerialBT.begin("SM_Tracker"); //Bluetooth device name
+  SerialBT.register_callback (Bt_Status);
+  
   SerialMon.begin(115200);
   if(!SD.begin()){
     Serial.println("Card Mount Failed");
@@ -140,7 +169,7 @@ void setup() {
                       "Task2",     /* name of task. */
                       20000,       /* Stack size of task */
                       NULL,        /* parameter of the task */
-                      1,           /* priority of the task */
+                      2,           /* priority of the task */
                       &Task2,      /* Task handle to keep track of created task */
                       1);          /* pin task to core 1 */
       delay(500); 
@@ -156,27 +185,39 @@ void loop() {
 //Task1code: Waits for Arduino Data and Saves to SD
 void Task1code( void * pvParameters ){
   for(;;){
-    if(Serial2.available()>0){ //Arduino Data avail??
-      String http_data = Serial2.readStringUntil('\n'); //Arduino Serial
+    while(SerialBT.available()>0) {
+      character = (char)SerialBT.read();
+      //delay(1); //wait for the next byte, if after this nothing has arrived it means the text was not part of the same stream entered by the user
+      App_Data+=character;
+    }
+
+    while(Serial2.available()>0){
+      character = (char)Serial2.read();
+      delay(1); //wait for the next byte, if after this nothing has arrived it means the text was not part of the same stream entered by the user
+      App_Data+=character;
+    }
+    
+    if(App_Data.length()<10&&App_Data!=""){
+      SerialBT.print(App_Data);
+      Serial.println(App_Data);
+    }
+    if(App_Data.length()>15){
+      //Read fuel
+      String Fuel_level = "";//read_fuel();
+      String http_data = App_Data + Fuel_level;
       Serial.println(http_data);
-      delay(10);
+      //delay(1);
       String lastnum = readFile(SD, "/File_LastNum.txt");
       int lastnum_int = lastnum.toInt();
       
       String http_txt= filename+(String)lastnum_int+".txt";
       Serial.println(http_txt);
-      if(http_data!=""){
-        writeFile(SD, http_txt, http_data);
-        lastnum_int++;
-        writeFile(SD, "/File_LastNum.txt", (String)lastnum_int);
-      }
+      writeFile(SD, http_txt, http_data);
+      lastnum_int++;
+      writeFile(SD, "/File_LastNum.txt", (String)lastnum_int);
     }
-    else{
-      //Serial.print("\t\t\t\t\tLoop 0 - Running on core: ");
-      //Serial.println(xPortGetCoreID());
-      //Serial.println();
-      //do nothing
-    }
+    App_Data="";
+   
     vTaskDelay(1/portTICK_PERIOD_MS);
   } 
   
@@ -204,29 +245,7 @@ void Task2code( void * pvParameters ){
     if(http_data!=""){
       digitalWrite(LEDPin, HIGH);
       String http_data = readFile(SD, http_txt);
-/*
-      String DT_RFID      = getValue(http_data, '|', 0);  //0
-      String OP_RFID      = getValue(http_data, '|', 1);  //1
-      String StartTime    = getValue(http_data, '|', 2);  //2
-      String CurrentTime  = getValue(http_data, '|', 2);  //3
-      String Lat          = getValue(http_data, '|', 3);  //5
-      String Long         = getValue(http_data, '|', 4);  //6
-      String Speed        = getValue(http_data, '|', 5);  //4
-      String Status       = getValue(http_data, '|', 6);  //5
-      String Fuel_Level   = "80";
-
-      String httpRequestData = "api_key=" + apiKeyValue + 
-                              "&dt_rfid=" + String(DT_RFID) + 
-                              "&op_rfid=" + String(OP_RFID) + 
-                              "&start_time=" + String(StartTime)+ 
-                              "&current_time=" + String(CurrentTime)+
-                              "&status=" + String(Status)+ 
-                              "&lat=" + String(Lat)+ 
-                              "&lng=" + String(Long)+ 
-                              "&elevation=" + String(Fuel_Level)+
-                              "&speed=" + String(Speed)+ 
-                              "&fuel=" + String(Fuel_Level) + "";
-                     */         
+       
       String httpRequestData = "api_key=" + apiKeyValue +"&"+ http_data + "&fuel=60" +"";
       Serial.println(httpRequestData);
       
@@ -259,7 +278,7 @@ void Task2code( void * pvParameters ){
       }
        digitalWrite(LEDPin, LOW);
     }
-    vTaskDelay(100/portTICK_PERIOD_MS);
+    vTaskDelay(1/portTICK_PERIOD_MS);
   }
 }
 
@@ -296,10 +315,10 @@ String readFile(fs::FS &fs, String path){
 bool writeFile(fs::FS &fs, String path, String message){
     
     Serial.println("Writing file: "+ path);
-    vTaskDelay(10/portTICK_PERIOD_MS);
+    vTaskDelay(1/portTICK_PERIOD_MS);
     
     File file = fs.open(path, FILE_WRITE);
-    vTaskDelay(10/portTICK_PERIOD_MS);
+    vTaskDelay(1/portTICK_PERIOD_MS);
     
     if(!file){
         Serial.println("Failed to open file for writing");
@@ -391,4 +410,15 @@ String getValue(String data, char separator, int index)
         }
     }
     return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
+}
+
+String read_fuel(){
+  String FL;
+  Serial2.print("Fetch");
+
+  while(millis()<10)
+    if(Serial2.available()>0)
+      FL = Serial2.readStringUntil('\n');
+
+  return FL;
 }
