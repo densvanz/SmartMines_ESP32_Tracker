@@ -9,6 +9,16 @@
 #include "SPI.h"
 #include "Arduino.h"
 
+// -  -  -  -- Fuel variables - --- - -
+// Potentiometer is connected to GPIO 34 (Analog ADC1_CH6) 
+const int potPin = 34;
+const int MAX_VAL_RAW = 3600;
+const int MIN_VAL_RAW = 1250;
+// variable for storing the potentiometer value
+int potValue = 0;
+int CAL=0;
+
+
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
 #endif
@@ -100,6 +110,7 @@ bool setPowerBoostKeepOn(int en){
 }
 
 void setup() {
+  CAL = (MAX_VAL_RAW - MIN_VAL_RAW)/100;
   pinMode(LEDPin, OUTPUT);
   pinMode(BT_LED, OUTPUT);
   digitalWrite (BT_LED, LOW);
@@ -202,9 +213,7 @@ void Task1code( void * pvParameters ){
       Serial.println(App_Data);
     }
     if(App_Data.length()>15){
-      //Read fuel
-      String Fuel_level = "";//read_fuel();
-      String http_data = App_Data + Fuel_level;
+      String http_data = App_Data ;
       Serial.println(http_data);
       //delay(1);
       String lastnum = readFile(SD, "/File_LastNum.txt");
@@ -252,8 +261,9 @@ void Task2code( void * pvParameters ){
     if(http_data!=""){
       digitalWrite(LEDPin, HIGH);
       String http_data = readFile(SD, http_txt);
-       
-      String httpRequestData = "api_key=" + apiKeyValue +"&"+ http_data + "&fuel=60" +"";
+      //Read fuel
+      String Fuel_level = read_fuel();
+      String httpRequestData = "api_key=" + apiKeyValue +"&"+ http_data + "&fuel="+ Fuel_level +"";
       Serial.println(httpRequestData);
       
       bool Send_success=SendtoServer(httpRequestData);
@@ -431,12 +441,14 @@ String getValue(String data, char separator, int index)
 }
 
 String read_fuel(){
-  String FL;
-  Serial2.print("Fetch");
+  int FL;
+  
+  // Reading potentiometer value
+  potValue = analogRead(potPin);
+  FL = abs((MAX_VAL_RAW - potValue))/CAL;
+  
+  //Serial.println(" Fuel Level = "+ String(FL) +"%");
+  //delay(500);
 
-  while(millis()<10)
-    if(Serial2.available()>0)
-      FL = Serial2.readStringUntil('\n');
-
-  return FL;
+  return (String)FL;
 }
