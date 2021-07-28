@@ -204,7 +204,7 @@ void Task1code( void * pvParameters ){
 
     while(Serial2.available()>0){
       character = (char)Serial2.read();
-      delay(1); 
+      //delay(1); 
       App_Data+=character;
     }
     
@@ -213,7 +213,9 @@ void Task1code( void * pvParameters ){
       Serial.println(App_Data);
     }
     if(App_Data.length()>15){
-      String http_data = App_Data ;
+      //Read fuel
+      String Fuel_level = read_fuel();
+      String http_data = App_Data + "&fuel="+ Fuel_level ;
       Serial.println(http_data);
       //delay(1);
       String lastnum = readFile(SD, "/File_LastNum.txt");
@@ -221,6 +223,7 @@ void Task1code( void * pvParameters ){
       
       String http_txt= filename+(String)lastnum_int+".txt";
       Serial.println(http_txt);
+
       bool written1=false;
       bool written2=false;
       while(!written1){ //retry if failed to write
@@ -255,15 +258,13 @@ void Task2code( void * pvParameters ){
     String http_txt= filename+(String)lastsent+".txt";
     String http_data = readFile(SD, http_txt);
   
-    int lastsent_int = lastsent.toInt();
-    int lastnum_int = lastnum.toInt();
+    //int lastsent_int = lastsent.toInt();
+    //int lastnum_int = lastnum.toInt();
     
     if(http_data!=""){
       digitalWrite(LEDPin, HIGH);
       String http_data = readFile(SD, http_txt);
-      //Read fuel
-      String Fuel_level = read_fuel();
-      String httpRequestData = "api_key=" + apiKeyValue +"&"+ http_data + "&fuel="+ Fuel_level +"";
+      String httpRequestData = "api_key=" + apiKeyValue +"&"+ http_data +"";
       Serial.println(httpRequestData);
       
       bool Send_success=SendtoServer(httpRequestData);
