@@ -245,22 +245,23 @@ void Task1code( void * pvParameters ){
 //Task2code: Scans SD card and send to server
 void Task2code( void * pvParameters ){
   for(;;){
-    String lastsent=readFile(SD, "/File_LastSent.txt");
-    String lastnum=readFile(SD, "/File_LastNum.txt");
+    String lastsent;
+    String lastnum;
 
-    if(lastnum!="0"||lastsent!="0")
-    {
-    Serial.println("LastNum:" + lastnum);
-    Serial.println("LastSent:" + lastsent);
-    //Serial.println(http_txt+" : " + http_data);
+    while(lastnum==""||lastsent==""){
+      lastsent=readFile(SD, "/File_LastSent.txt");
+      lastnum=readFile(SD, "/File_LastNum.txt");
     }
     
+    if(lastnum!="0"||lastsent!="0")    {
+      Serial.println("LastNum:" + lastnum);
+      Serial.println("LastSent:" + lastsent);
+      //Serial.println(http_txt+" : " + http_data);
+    }
+
     String http_txt= filename+(String)lastsent+".txt";
     String http_data = readFile(SD, http_txt);
-  
-    //int lastsent_int = lastsent.toInt();
-    //int lastnum_int = lastnum.toInt();
-    
+     
     if(http_data!=""){
       digitalWrite(LEDPin, HIGH);
       String http_data = readFile(SD, http_txt);
@@ -269,8 +270,13 @@ void Task2code( void * pvParameters ){
       
       bool Send_success=SendtoServer(httpRequestData);
 
-      String lastsent=readFile(SD, "/File_LastSent.txt");
-      String lastnum=readFile(SD, "/File_LastNum.txt");
+      String lastsent;
+      String lastnum;
+      while(lastnum==""||lastsent==""){
+        lastsent=readFile(SD, "/File_LastSent.txt");
+        lastnum=readFile(SD, "/File_LastNum.txt");
+      }
+    
       int lastsent_int = lastsent.toInt();
       int lastnum_int = lastnum.toInt();
       
@@ -307,7 +313,7 @@ void Task2code( void * pvParameters ){
       }
        digitalWrite(LEDPin, LOW);
     }
-    vTaskDelay(1/portTICK_PERIOD_MS);
+    vTaskDelay(10/portTICK_PERIOD_MS);
   }
 }
 
@@ -447,7 +453,8 @@ String read_fuel(){
   // Reading potentiometer value
   potValue = analogRead(potPin);
   FL = abs((MAX_VAL_RAW - potValue))/CAL;
-  
+  if(FL>100)
+    FL=100;
   //Serial.println(" Fuel Level = "+ String(FL) +"%");
   //delay(500);
 
