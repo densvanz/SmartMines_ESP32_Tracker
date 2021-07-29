@@ -335,6 +335,9 @@ String readFile(fs::FS &fs, String path){
     //vTaskDelay(1000/portTICK_PERIOD_MS);
     if(!file){
         Serial.println("Failed to open "+ path +" for reading");
+        digitalWrite(LEDPin, HIGH);
+        vTaskDelay(100/portTICK_PERIOD_MS);
+        digitalWrite(LEDPin, LOW);
         return read_String;
     }
 
@@ -423,7 +426,7 @@ bool SendtoServer(String httpRequestData_local){
       SerialMon.println(F("Server disconnected"));
       modem.gprsDisconnect();
       SerialMon.println(F("GPRS disconnected"));
-      Serial2.print(web_response); // Send response back to Bluetooth Module in Arduino
+      SerialBT.print(web_response); // Send response back to App
       Serial.println(web_response);
       return true;
     }
