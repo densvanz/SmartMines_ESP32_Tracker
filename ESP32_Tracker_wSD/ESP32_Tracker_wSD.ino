@@ -49,6 +49,7 @@ TaskHandle_t Task1;
 TaskHandle_t Task2;
 String filename = "/File_httpData";
 String App_Data, character;
+String BT_String;
 
 #define RXD2 14
 #define TXD2 12
@@ -199,23 +200,23 @@ void Task1code( void * pvParameters ){
     while(SerialBT.available()>0) {
       character = (char)SerialBT.read();
       //delay(1); //wait for the next byte, if after this nothing has arrived it means the text was not part of the stream
-      App_Data+=character; 
+      BT_String+=character; 
     }
 
     while(Serial2.available()>0){
-      character = (char)Serial2.read();
+      App_Data = (Serial2.readStringUntil('\n'));
       //delay(1); 
-      App_Data+=character;
+      //App_Data+=character;
     }
     
     if(App_Data.length()<10&&App_Data!=""){
       SerialBT.print(App_Data);
       Serial.println(App_Data);
     }
-    if(App_Data.length()>15){
+    if(BT_String.length()>15){
       //Read fuel
       String Fuel_level = read_fuel();
-      String http_data = App_Data + "&fuel="+ Fuel_level ;
+      String http_data = BT_String + "&fuel="+ Fuel_level ;
       Serial.println(http_data);
       //delay(1);
       String lastnum = readFile(SD, "/File_LastNum.txt");
@@ -235,8 +236,8 @@ void Task1code( void * pvParameters ){
         written2=writeFile(SD, "/File_LastNum.txt", (String)lastnum_int);
       }
     }
-    App_Data="";
-   
+    App_Data = "";
+    BT_String = "";
     vTaskDelay(1/portTICK_PERIOD_MS);
   } 
   
