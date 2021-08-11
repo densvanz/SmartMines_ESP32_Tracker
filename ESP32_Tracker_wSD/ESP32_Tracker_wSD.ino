@@ -148,6 +148,9 @@ void setup() {
   if(strlen(simPIN) && modem.getSimStatus() != 3 ) {
     modem.simUnlock(simPIN);
   }
+  
+  reset_SD_Card();
+  
   SerialMon.println("Modem Initialized...");
   if(1){
     if(!SD.exists("/File_LastSent.txt")&&!SD.exists("/File_LastNum.txt")){
@@ -160,8 +163,6 @@ void setup() {
       String lastnum = readFile(SD, "/File_LastNum.txt");
       Serial.println("LastNum:" + lastnum);
       Serial.println("LastSent:" + lastsent);
-      
-      
     }
   
     //create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
@@ -262,7 +263,25 @@ void Task2code( void * pvParameters ){
 
     String http_txt= filename+(String)lastsent+".txt";
     String http_data = readFile(SD, http_txt);
-     
+
+       
+    int lastsent_int = lastsent.toInt();
+    int lastnum_int = lastnum.toInt();
+    
+    if(http_data==""&&lastnum_int!=0){
+      
+      lastsent_int++;
+      bool written1 = false;
+
+      while(!written1) {
+        written1=writeFile(SD, "/File_LastSent.txt", (String)lastsent_int);
+      }
+
+      http_txt = filename+(String)lastsent+".txt";
+      http_data = readFile(SD, http_txt);
+    }
+
+    
     if(http_data!=""){
       digitalWrite(LEDPin, HIGH);
       String http_data = readFile(SD, http_txt);
@@ -337,7 +356,7 @@ String readFile(fs::FS &fs, String path){
     if(!file){
         Serial.println("Failed to open "+ path +" for reading");
         digitalWrite(LEDPin, HIGH);
-        vTaskDelay(100/portTICK_PERIOD_MS);
+        vTaskDelay(10/portTICK_PERIOD_MS);
         digitalWrite(LEDPin, LOW);
         return read_String;
     }
@@ -463,4 +482,24 @@ String read_fuel(){
   //delay(500);
 
   return (String)FL;
+}
+
+
+void reset_SD_Card(){
+
+  for(int i=0; i<50; i++)
+    { 
+      String http_txt= filename+String(i)+".txt";
+      String data_file = readFile(SD, http_txt);
+      if(data_file!="")
+      {
+        Serial.println(data_file);
+        deleteFile(SD, http_txt);
+      }
+      //else
+        //Serial.println("Empty");
+    }
+    deleteFile(SD, "/File_LastNum.txt");
+    deleteFile(SD, "/File_LastSent.txt");
+    
 }
