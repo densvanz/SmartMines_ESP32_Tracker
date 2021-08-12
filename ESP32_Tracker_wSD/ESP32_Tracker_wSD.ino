@@ -487,19 +487,19 @@ String read_fuel(){
 
 void reset_SD_Card(){
 
-  for(int i=0; i<50; i++)
+  for(int i=0; i<5; i++)
     { 
       String http_txt= filename+String(i)+".txt";
       String data_file = readFile(SD, http_txt);
       if(data_file!="")
       {
         Serial.println(data_file);
-        deleteFile(SD, http_txt);
+        //deleteFile(SD, http_txt);
       }
       //else
         //Serial.println("Empty");
     }
-    deleteFile(SD, "/File_LastNum.txt");
-    deleteFile(SD, "/File_LastSent.txt");
+    //deleteFile(SD, "/File_LastNum.txt");
+    //deleteFile(SD, "/File_LastSent.txt");
     
 }
