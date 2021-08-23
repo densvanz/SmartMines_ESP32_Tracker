@@ -9,14 +9,18 @@
 #include "SPI.h"
 #include "Arduino.h"
 
+
 // -  -  -  -- Fuel variables - --- - -
 // Potentiometer is connected to GPIO 34 (Analog ADC1_CH6) 
 const int potPin = 34;
-const int MAX_VAL_RAW = 3600;
-const int MIN_VAL_RAW = 1250;
-// variable for storing the potentiometer value
+
+double MAX_VAL_V = 2.43; //voltage of maximum gauge value
+double MIN_VAL_V = 7.1;
+
 int potValue = 0;
-int CAL=0;
+double CAL=0;
+
+double V;
 
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
@@ -50,6 +54,10 @@ TaskHandle_t Task2;
 String filename = "/File_httpData";
 String App_Data, character;
 String BT_String;
+String LastNum = "/File_LastNum.txt";
+String LastSent = "/File_LastSent.txt";
+
+
 
 #define RXD2 14
 #define TXD2 12
@@ -111,7 +119,10 @@ bool setPowerBoostKeepOn(int en){
 }
 
 void setup() {
-  CAL = (MAX_VAL_RAW - MIN_VAL_RAW)/100;
+  MAX_VAL_V = MAX_VAL_V * 0.129 ; //voltage div ratio (68k,10k ohms)
+  MIN_VAL_V = MIN_VAL_V * 0.129 ;
+  CAL = (MAX_VAL_V - MIN_VAL_V);
+  
   pinMode(LEDPin, OUTPUT);
   pinMode(BT_LED, OUTPUT);
   digitalWrite (BT_LED, LOW);
@@ -151,16 +162,17 @@ void setup() {
   
   reset_SD_Card();
   
+   
   SerialMon.println("Modem Initialized...");
   if(1){
-    if(!SD.exists("/File_LastSent.txt")&&!SD.exists("/File_LastNum.txt")){
-      writeFile(SD, "/File_LastSent.txt", "0");
-      writeFile(SD, "/File_LastNum.txt", "0");
+    if(!SD.exists(LastSent)&&!SD.exists(LastNum)){
+      writeFile(SD, LastSent, "0");
+      writeFile(SD, LastNum, "0");
       Serial.println("LastNum and LastSent written");
     }
     else{
-      String lastsent = readFile(SD, "/File_LastSent.txt");
-      String lastnum = readFile(SD, "/File_LastNum.txt");
+      String lastsent = readFile(SD, LastSent);
+      String lastnum = readFile(SD, LastNum);
       Serial.println("LastNum:" + lastnum);
       Serial.println("LastSent:" + lastsent);
     }
@@ -198,6 +210,8 @@ void loop() {
 //Task1code: Waits for App Data and Saves to SD
 void Task1code( void * pvParameters ){
   for(;;){
+    
+    
     while(SerialBT.available()>0) {
       character = (char)SerialBT.read();
       //delay(1); //wait for the next byte, if after this nothing has arrived it means the text was not part of the stream
@@ -205,12 +219,12 @@ void Task1code( void * pvParameters ){
     }
 
     while(Serial2.available()>0){
-      App_Data = (Serial2.readStringUntil('\n'));
+      character = (char)Serial2.read(); //rfid data from adruino
       //delay(1); 
-      //App_Data+=character;
+      App_Data+=character;
     }
     
-    if(App_Data.length()<10&&App_Data!=""){
+    if(App_Data!=""){
       SerialBT.print(App_Data);
       Serial.println(App_Data);
     }
@@ -220,7 +234,7 @@ void Task1code( void * pvParameters ){
       String http_data = BT_String + "&fuel="+ Fuel_level ;
       Serial.println(http_data);
       //delay(1);
-      String lastnum = readFile(SD, "/File_LastNum.txt");
+      String lastnum = readFile(SD, LastNum);
       int lastnum_int = lastnum.toInt();
       
       String http_txt= filename+(String)lastnum_int+".txt";
@@ -234,33 +248,34 @@ void Task1code( void * pvParameters ){
       lastnum_int++;
 
       while(!written2){
-        written2=writeFile(SD, "/File_LastNum.txt", (String)lastnum_int);
+        written2=writeFile(SD, LastNum, (String)lastnum_int);
       }
+    }
+    if(App_Data==""&&BT_String==""){
+      Serial.print(".");
+      vTaskDelay(10/portTICK_PERIOD_MS);
     }
     App_Data = "";
     BT_String = "";
-    vTaskDelay(1/portTICK_PERIOD_MS);
+    vTaskDelay(20/portTICK_PERIOD_MS);
   } 
-  
+  vTaskDelay(20/portTICK_PERIOD_MS);
 }
 
 //Task2code: Scans SD card and send to server
 void Task2code( void * pvParameters ){
   for(;;){
+    
     String lastsent;
     String lastnum;
 
     while(lastnum==""||lastsent==""){
-      lastsent=readFile(SD, "/File_LastSent.txt");
-      lastnum=readFile(SD, "/File_LastNum.txt");
-    }
-    
-    if(lastnum!="0"||lastsent!="0")    {
+      lastsent=readFile(SD, LastSent);
+      lastnum=readFile(SD, LastNum);
       Serial.println("LastNum:" + lastnum);
       Serial.println("LastSent:" + lastsent);
-      //Serial.println(http_txt+" : " + http_data);
     }
-
+    
     String http_txt= filename+(String)lastsent+".txt";
     String http_data = readFile(SD, http_txt);
 
@@ -268,19 +283,31 @@ void Task2code( void * pvParameters ){
     int lastsent_int = lastsent.toInt();
     int lastnum_int = lastnum.toInt();
     
-    if(http_data==""&&lastnum_int!=0){
+    if(http_data==""&&(lastnum_int!=0&&lastnum!="")){
       
       lastsent_int++;
       bool written1 = false;
 
       while(!written1) {
-        written1=writeFile(SD, "/File_LastSent.txt", (String)lastsent_int);
+        written1=writeFile(SD, LastSent, (String)lastsent_int);
       }
 
       http_txt = filename+(String)lastsent+".txt";
       http_data = readFile(SD, http_txt);
     }
+    if((lastsent_int>++lastnum_int)){
+          lastnum="0";
+          lastsent="0";
+          bool written1=false;
+          bool written2=false;
+          while(!written1) {         
+            written1 = writeFile(SD, LastSent, lastsent);
+          }
 
+          while(!written2) {
+            written2 = writeFile(SD, LastNum, lastnum);
+          }
+     }
     
     if(http_data!=""){
       digitalWrite(LEDPin, HIGH);
@@ -293,8 +320,8 @@ void Task2code( void * pvParameters ){
       String lastsent;
       String lastnum;
       while(lastnum==""||lastsent==""){
-        lastsent=readFile(SD, "/File_LastSent.txt");
-        lastnum=readFile(SD, "/File_LastNum.txt");
+        lastsent=readFile(SD, LastSent);
+        lastnum=readFile(SD, LastNum);
       }
     
       int lastsent_int = lastsent.toInt();
@@ -308,11 +335,11 @@ void Task2code( void * pvParameters ){
           bool written1=false;
           bool written2=false;
           while(!written1) {         
-            written1 = writeFile(SD, "/File_LastSent.txt", lastsent);
+            written1 = writeFile(SD, LastSent, lastsent);
           }
 
           while(!written2) {
-            written2 = writeFile(SD, "/File_LastNum.txt", lastnum);
+            written2 = writeFile(SD, LastNum, lastnum);
           }
 
           if(written1&&written2)
@@ -324,7 +351,7 @@ void Task2code( void * pvParameters ){
           bool written1 = false;
 
           while(!written1) {
-            written1=writeFile(SD, "/File_LastSent.txt", (String)lastsent_int);
+            written1=writeFile(SD, LastSent, (String)lastsent_int);
           }
           
           if(written1)
@@ -333,14 +360,15 @@ void Task2code( void * pvParameters ){
       }
        digitalWrite(LEDPin, LOW);
     }
-    vTaskDelay(10/portTICK_PERIOD_MS);
+    vTaskDelay(100/portTICK_PERIOD_MS);
   }
+  vTaskDelay(10/portTICK_PERIOD_MS);
 }
 
 
 void deleteFile(fs::FS &fs, String path){
     Serial.println("Deleting file: "+ path);
-    //vTaskDelay(1000/portTICK_PERIOD_MS);
+    vTaskDelay(10/portTICK_PERIOD_MS);
     if(fs.remove(path)){
         Serial.println("File deleted");
     } else {
@@ -352,11 +380,12 @@ String readFile(fs::FS &fs, String path){
     //Serial.println("Reading file: "+ path);
     String read_String="";
     File file = fs.open(path);
-    //vTaskDelay(1000/portTICK_PERIOD_MS);
+    vTaskDelay(100/portTICK_PERIOD_MS);
     if(!file){
+        Serial.println();
         Serial.println("Failed to open "+ path +" for reading");
         digitalWrite(LEDPin, HIGH);
-        vTaskDelay(10/portTICK_PERIOD_MS);
+        vTaskDelay(50/portTICK_PERIOD_MS);
         digitalWrite(LEDPin, LOW);
         return read_String;
     }
@@ -373,10 +402,10 @@ String readFile(fs::FS &fs, String path){
 bool writeFile(fs::FS &fs, String path, String message){
     
     Serial.println("Writing file: "+ path);
-    vTaskDelay(1/portTICK_PERIOD_MS);
+    vTaskDelay(10/portTICK_PERIOD_MS);
     
     File file = fs.open(path, FILE_WRITE);
-    vTaskDelay(1/portTICK_PERIOD_MS);
+    vTaskDelay(10/portTICK_PERIOD_MS);
     
     if(!file){
         Serial.println("Failed to open file for writing");
@@ -402,6 +431,7 @@ bool SendtoServer(String httpRequestData_local){
   
   if (!modem.gprsConnect(apn, gprsUser, gprsPass)) {
     SerialMon.println(" fail");
+    vTaskDelay(10/portTICK_PERIOD_MS);
     return false;
    }
   else {
@@ -448,6 +478,7 @@ bool SendtoServer(String httpRequestData_local){
       SerialMon.println(F("GPRS disconnected"));
       SerialBT.print(web_response); // Send response back to App
       Serial.println(web_response);
+      vTaskDelay(10/portTICK_PERIOD_MS);
       return true;
     }
   }
@@ -471,35 +502,60 @@ String getValue(String data, char separator, int index)
 }
 
 String read_fuel(){
-  int FL;
-  
-  // Reading potentiometer value
+  double FL;
   potValue = analogRead(potPin);
-  FL = abs((MAX_VAL_RAW - potValue))/CAL;
+  V = potValue * 3.3/4095;
+  if(V>MIN_VAL_V)
+    V=MIN_VAL_V;
+
+  FL = 100*(V - MIN_VAL_V)/CAL;
+
   if(FL>100)
-    FL=100;
-  //Serial.println(" Fuel Level = "+ String(FL) +"%");
-  //delay(500);
+    FL = 100;
+  //Serial.println("Raw: "+(String)potValue + "  " + "Maxred: " +  MAX_VAL +"  "+ " Minred: " + MIN_VAL);
+  
+  Serial.println(" Fuel Level = "+ String(FL) +"%");
+  Serial.println(V);
+  Serial.println(CAL);
+  //delay(500); 
 
   return (String)FL;
 }
 
 
 void reset_SD_Card(){
+  /*
+  String lastsent=readFile(SD, LastSent);
+  String lastnum=readFile(SD, LastNum);
+  int lastsent_int = lastsent.toInt();
+  int lastnum_int = lastnum.toInt();
+  if((lastsent_int>lastnum_int)){
+          lastnum="0";
+          lastsent="0";
+          bool written1=false;
+          bool written2=false;
+          while(!written1) {         
+            written1 = writeFile(SD, LastSent, lastsent);
+          }
 
-  for(int i=0; i<5; i++)
+          while(!written2) {
+            written2 = writeFile(SD, LastNum, lastnum);
+          }
+
+  }*/
+  for(int i=0; i<10; i++)
     { 
       String http_txt= filename+String(i)+".txt";
       String data_file = readFile(SD, http_txt);
       if(data_file!="")
       {
         Serial.println(data_file);
-        //deleteFile(SD, http_txt);
+        deleteFile(SD, http_txt);
       }
       //else
         //Serial.println("Empty");
     }
-    //deleteFile(SD, "/File_LastNum.txt");
-    //deleteFile(SD, "/File_LastSent.txt");
+    //deleteFile(SD, LastNum);
+    //deleteFile(SD, LastSent);
     
 }
